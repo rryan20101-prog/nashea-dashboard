@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة الجهات المانحة 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="assets/logo-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <img src="assets/logo-icon.png" alt="شعار جمعية نشء" class="brand-logo">
+      <div>
+        <div class="brand-title">لوحة الجهات المانحة 2026</div>
+        <div class="brand-sub">جمعية نشء لتنمية الطفولة</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <span id="lastUpdated" class="last-updated">—</span>
+      <button id="refreshBtn" class="btn-refresh" type="button">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6a5.96 5.96 0 0 1 4.22 1.78L13 11h7V4l-2.35 2.35Z"/></svg>
+        تحديث
+      </button>
+    </div>
+  </div>
+  <nav class="subnav">
+    <div class="subnav-inner">
+      <a href="index.html" class="subnav-link">الخطة التشغيلية</a>
+      <a href="donors.html" class="subnav-link active">الجهات المانحة</a>
+    </div>
+  </nav>
+</header>
+
+<main class="page">
+
+  <div id="statusBanner" class="status-banner" hidden></div>
+
+  <section class="kpi-grid" id="kpiGrid" aria-label="مؤشرات إجمالية">
+    <div class="kpi-card">
+      <div class="kpi-label">عدد الجهات المانحة</div>
+      <div class="kpi-value" id="kpiEntities">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">عدد الطلبات</div>
+      <div class="kpi-value" id="kpiRequests">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">طلبات مدعومة</div>
+      <div class="kpi-value" id="kpiSupported">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">نسبة القبول</div>
+      <div class="kpi-value" id="kpiAcceptRate">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">إجمالي المبلغ المرفوع (ر.س)</div>
+      <div class="kpi-value" id="kpiRaisedAmount">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">إجمالي المبلغ المعتمد (ر.س)</div>
+      <div class="kpi-value" id="kpiApprovedAmount">–</div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="حالة الطلبات">
+    <div class="panel-head">
+      <h2>حالة طلبات المنح</h2>
+    </div>
+    <div class="panel-body">
+      <div id="statusChart" class="chart-wrap"></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="قائمة الجهات المانحة">
+    <div class="panel-head">
+      <h2>الجهات المانحة والطلبات</h2>
+      <div class="filters">
+        <input id="searchInput" class="search-input" type="search" placeholder="ابحث بالجهة أو المشروع أو الموظف...">
+        <select id="statusFilter" class="goal-filter">
+          <option value="">كل الحالات</option>
+        </select>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="table-scroll">
+        <table id="donorsTable">
+          <thead>
+            <tr>
+              <th data-sort="entity">الجهة المانحة<span class="sort-arrow"></span></th>
+              <th data-sort="project">اسم المشروع<span class="sort-arrow"></span></th>
+              <th data-sort="status">حالة الطلب<span class="sort-arrow"></span></th>
+              <th class="num" data-sort="approvedAmount">المبلغ المعتمد<span class="sort-arrow"></span></th>
+              <th>طريقة الرفع</th>
+              <th class="num" data-sort="submittedAmount">المبلغ المرفوع<span class="sort-arrow"></span></th>
+              <th data-sort="employee">الموظف<span class="sort-arrow"></span></th>
+              <th data-sort="date">تاريخ الرفع<span class="sort-arrow"></span></th>
+              <th>رقم التواصل</th>
+              <th class="col-desc">ملاحظات</th>
+            </tr>
+          </thead>
+          <tbody id="donorsBody">
+            <tr><td colspan="10" class="loading-row">جارٍ تحميل البيانات من جدول البيانات...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer class="page-footer">
+    البيانات مرتبطة مباشرة بجدول بيانات Google Sheets الخاص بملف الجهات المانحة 2026، ويتم تحديثها تلقائيًا عند كل زيارة.
+  </footer>
+
+</main>
+
+<script src="donors.js"></script>
+</body>
+</html>
