@@ -200,13 +200,80 @@
     return { initiatives, errors };
   }
 
-  // ---- Rendering ----------------------------------------------------
+  // ---- Shared helpers ----------------------------------------------------
 
   const fmtInt = n => Math.round(n).toLocaleString('en-US');
+
+  function completionPct(x) {
+    if (x.target === null || x.target <= 0) return null;
+    return Math.min((x.achieved || 0) / x.target * 100, 100);
+  }
+
+  // Fixed RAG thresholds: <34% critical, 34-69% warning, >=70% good.
+  function statusClass(pct) {
+    if (pct === null) return '';
+    if (pct < 34) return 'status-critical';
+    if (pct < 70) return 'status-warning';
+    return 'status-good';
+  }
+
+  function escapeXML(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Rough greedy word-wrap for SVG <text>, which has no native wrapping.
+  function wrapLabel(text, maxCharsPerLine, maxLines) {
+    const words = text.split(/\s+/);
+    const lines = [];
+    let current = '';
+    words.forEach(w => {
+      const next = current ? `${current} ${w}` : w;
+      if (next.length > maxCharsPerLine && current) {
+        lines.push(current);
+        current = w;
+      } else {
+        current = next;
+      }
+    });
+    if (current) lines.push(current);
+    if (lines.length > maxLines) {
+      const kept = lines.slice(0, maxLines);
+      kept[maxLines - 1] = kept[maxLines - 1].replace(/.{0,3}$/, '…');
+      return kept;
+    }
+    return lines;
+  }
+
+  function computeGoalStats(initiatives) {
+    const byGoal = new Map();
+    initiatives.forEach(x => {
+      if (!byGoal.has(x.goal)) {
+        byGoal.set(x.goal, { goal: x.goal, count: 0, cost: 0, targetSum: 0, achievedSum: 0 });
+      }
+      const g = byGoal.get(x.goal);
+      g.count += 1;
+      g.cost += x.cost || 0;
+      if (x.target !== null && x.target > 0) {
+        g.targetSum += x.target;
+        g.achievedSum += Math.min(x.achieved || 0, x.target);
+      }
+    });
+    return Array.from(byGoal.values()).map(g => ({
+      ...g,
+      pct: g.targetSum > 0 ? (g.achievedSum / g.targetSum) * 100 : null,
+    }));
+  }
+
+  // ---- Rendering: KPIs ----------------------------------------------------
 
   function renderKPIs(initiatives) {
     const goals = new Set(initiatives.map(x => x.goal));
     const totalCost = initiatives.reduce((s, x) => s + (x.cost || 0), 0);
+    const departments = new Set(initiatives.map(x => x.responsible).filter(Boolean));
 
     let targetSum = 0, achievedSum = 0, withTarget = 0;
     initiatives.forEach(x => {
@@ -217,62 +284,90 @@
       }
     });
     const completion = targetSum > 0 ? (achievedSum / targetSum) * 100 : 0;
+    const avgCost = initiatives.length ? totalCost / initiatives.length : 0;
 
     document.getElementById('kpiGoals').textContent = fmtInt(goals.size);
     document.getElementById('kpiInitiatives').textContent = fmtInt(initiatives.length);
     document.getElementById('kpiCompletion').textContent = withTarget ? `${completion.toFixed(1)}%` : '—';
     document.getElementById('kpiCost').textContent = fmtInt(totalCost);
+    document.getElementById('kpiAvgCost').textContent = fmtInt(avgCost);
+    document.getElementById('kpiDepartments').textContent = fmtInt(departments.size);
   }
 
-  function renderChart(initiatives) {
-    const byGoal = new Map();
-    initiatives.forEach(x => {
-      byGoal.set(x.goal, (byGoal.get(x.goal) || 0) + (x.cost || 0));
-    });
-    const rows = Array.from(byGoal.entries()).sort((a, b) => b[1] - a[1]);
-    const container = document.getElementById('costChart');
+  // ---- Rendering: per-goal summary cards ----------------------------------
 
-    if (!rows.length || rows.every(r => r[1] === 0)) {
-      container.innerHTML = '<div class="chart-empty">لا توجد بيانات تكلفة متاحة بعد</div>';
+  function renderGoalSummary(initiatives) {
+    const stats = computeGoalStats(initiatives).sort((a, b) => b.cost - a.cost);
+    const grid = document.getElementById('goalSummaryGrid');
+
+    grid.innerHTML = stats.map(g => {
+      const pct = g.pct;
+      const pctLabel = pct === null ? '—' : `${pct.toFixed(0)}%`;
+      const cls = statusClass(pct);
+      return `
+        <div class="goal-card">
+          <div class="goal-card-title">${escapeXML(g.goal)}</div>
+          <div class="goal-card-cost">${fmtInt(g.cost)} <span style="font-size:0.6em;font-weight:700;">ر.س</span></div>
+          <div class="goal-card-row">
+            <span class="goal-card-metric-label">عدد المبادرات</span>
+            <span class="goal-card-count">${fmtInt(g.count)}</span>
+          </div>
+          <div class="goal-card-row">
+            <span class="goal-card-metric-label">نسبة الإنجاز</span>
+            <span class="goal-card-metric-value">${pctLabel}</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill ${cls}" style="width:${pct === null ? 0 : pct}%"></div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ---- Rendering: completion % by goal (vertical column chart) -----------
+
+  function renderCompletionChart(initiatives) {
+    const stats = computeGoalStats(initiatives).sort((a, b) => (b.pct || 0) - (a.pct || 0));
+    const container = document.getElementById('completionChart');
+
+    if (!stats.length) {
+      container.innerHTML = '<div class="chart-empty">لا توجد بيانات كافية بعد</div>';
       return;
     }
 
-    const max = Math.max(...rows.map(r => r[1]), 1);
-    const rowH = 34;
-    const gap = 10;
-    const topPad = 8;
-    const height = rows.length * (rowH + gap) + topPad;
-    const width = 900;
-    const labelW = 230;
-    const valueW = 90;
-    const trackX = labelW;
-    const trackW = width - labelW - valueW;
+    const colW = 96;
+    const gap = 18;
+    const plotH = 200;
+    const topPad = 26;
+    const labelH = 56;
+    const width = stats.length * (colW + gap) + gap;
+    const height = topPad + plotH + labelH;
+    const baseline = topPad + plotH;
 
     let bars = '';
-    rows.forEach(([goal, cost], idx) => {
-      const y = topPad + idx * (rowH + gap);
-      const barW = Math.max((cost / max) * trackW, cost > 0 ? 3 : 0);
-      const label = goal.length > 28 ? goal.slice(0, 27) + '…' : goal;
+    stats.forEach((g, idx) => {
+      const x = gap + idx * (colW + gap);
+      const pct = g.pct === null ? 0 : g.pct;
+      const barH = g.pct === null ? 0 : Math.max((pct / 100) * plotH, pct > 0 ? 4 : 0);
+      const y = baseline - barH;
+      const cls = statusClass(g.pct);
+      const valueLabel = g.pct === null ? '—' : `${pct.toFixed(0)}%`;
+      const lines = wrapLabel(g.goal, 13, 3);
+      const labelLines = lines.map((line, li) =>
+        `<tspan x="${x + colW / 2}" dy="${li === 0 ? 0 : 13}">${escapeXML(line)}</tspan>`
+      ).join('');
+
       bars += `
         <g>
-          <text class="bar-label" x="${width - 6}" y="${y + rowH / 2 + 4}" text-anchor="end">${escapeXML(label)}</text>
-          <rect class="bar-track" x="${trackX}" y="${y}" width="${trackW}" height="${rowH * 0.55}" rx="6" transform="translate(0, ${rowH * 0.225})" />
-          <rect class="bar-fill" x="${trackX + trackW - barW}" y="${y}" width="${barW}" height="${rowH * 0.55}" rx="6" transform="translate(0, ${rowH * 0.225})">
-            <title>${escapeXML(goal)}: ${fmtInt(cost)} ر.س</title>
+          <rect class="bar-track" x="${x}" y="${topPad}" width="${colW}" height="${plotH}" rx="8" />
+          <rect class="bar-fill ${cls}" x="${x}" y="${y}" width="${colW}" height="${barH}" rx="8">
+            <title>${escapeXML(g.goal)}: ${valueLabel}</title>
           </rect>
-          <text class="bar-value" x="${trackX + trackW - barW - 8}" y="${y + rowH / 2 + 4}" text-anchor="end">${fmtInt(cost)}</text>
+          <text class="bar-value" x="${x + colW / 2}" y="${y - 8 < topPad ? y + 16 : y - 8}" text-anchor="middle">${valueLabel}</text>
+          <text class="bar-label" x="${x + colW / 2}" y="${baseline + 18}" text-anchor="middle">${labelLines}</text>
         </g>`;
     });
 
-    container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="التكلفة حسب الهدف الاستراتيجي">${bars}</svg>`;
-  }
-
-  function escapeXML(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+    container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="نسبة الإنجاز حسب الهدف الاستراتيجي">${bars}</svg>`;
   }
 
   function populateGoalFilter(initiatives) {
@@ -289,17 +384,63 @@
     });
   }
 
+  // ---- Rendering: table (filter + sort) -----------------------------------
+
+  let sortState = { key: 'cost', dir: 'desc' };
+
+  const SORT_ACCESSORS = {
+    goal: x => x.goal || '',
+    name: x => x.name || '',
+    responsible: x => x.responsible || '',
+    target: x => x.target,
+    achieved: x => x.achieved,
+    pct: x => completionPct(x),
+    cost: x => x.cost || 0,
+  };
+
+  function sortInitiatives(list) {
+    const accessor = SORT_ACCESSORS[sortState.key];
+    if (!accessor) return list;
+    const dirMul = sortState.dir === 'asc' ? 1 : -1;
+    return [...list].sort((a, b) => {
+      const va = accessor(a);
+      const vb = accessor(b);
+      const aNull = va === null || va === undefined || va === '';
+      const bNull = vb === null || vb === undefined || vb === '';
+      if (aNull && bNull) return 0;
+      if (aNull) return 1;
+      if (bNull) return -1;
+      if (typeof va === 'string') return va.localeCompare(vb, 'ar') * dirMul;
+      return (va - vb) * dirMul;
+    });
+  }
+
+  function updateSortArrows() {
+    document.querySelectorAll('#initiativesTable thead th[data-sort]').forEach(th => {
+      const arrow = th.querySelector('.sort-arrow');
+      if (!arrow) return;
+      if (th.dataset.sort === sortState.key) {
+        arrow.textContent = sortState.dir === 'asc' ? '▲' : '▼';
+      } else {
+        arrow.textContent = '';
+      }
+    });
+  }
+
   function renderTable(initiatives) {
     const search = document.getElementById('searchInput').value.trim().toLowerCase();
     const goalFilter = document.getElementById('goalFilter').value;
     const body = document.getElementById('initiativesBody');
 
-    const filtered = initiatives.filter(x => {
+    let filtered = initiatives.filter(x => {
       if (goalFilter && x.goal !== goalFilter) return false;
       if (!search) return true;
       const hay = `${x.name} ${x.indicator} ${x.responsible} ${x.description}`.toLowerCase();
       return hay.includes(search);
     });
+
+    filtered = sortInitiatives(filtered);
+    updateSortArrows();
 
     if (!filtered.length) {
       body.innerHTML = '<tr><td colspan="9" class="empty-row">لا توجد نتائج مطابقة</td></tr>';
@@ -309,11 +450,12 @@
     body.innerHTML = filtered.map(x => {
       const target = x.target;
       const achieved = x.achieved;
-      const pct = (target && target > 0) ? Math.min((achieved || 0) / target * 100, 100) : null;
+      const pct = completionPct(x);
       const pctLabel = pct === null ? '—' : `${pct.toFixed(0)}%`;
+      const cls = statusClass(pct);
       const progressBar = pct === null ? '—' : `
         <div class="progress-cell">
-          <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <div class="progress-track"><div class="progress-fill ${cls}" style="width:${pct}%"></div></div>
           <span class="progress-pct">${pctLabel}</span>
         </div>`;
 
@@ -324,7 +466,7 @@
             <strong>${escapeXML(x.name || '—')}</strong>
             ${x.seq !== null ? `<span class="seq-badge">مبادرة رقم ${escapeXML(String(x.seq))}</span>` : ''}
           </td>
-          <td><div class="desc-cell" title="${escapeXML(x.description)}">${escapeXML(x.description || '—')}</div></td>
+          <td><div class="desc-cell">${escapeXML(x.description || '—')}</div></td>
           <td>${escapeXML(x.responsible || '—')}</td>
           <td>${escapeXML(x.indicator || '—')}</td>
           <td class="num">${target !== null ? fmtInt(target) : '—'}</td>
@@ -358,7 +500,8 @@
       allInitiatives = initiatives;
       renderStatus(errors);
       renderKPIs(initiatives);
-      renderChart(initiatives);
+      renderGoalSummary(initiatives);
+      renderCompletionChart(initiatives);
       populateGoalFilter(initiatives);
       renderTable(initiatives);
       document.getElementById('lastUpdated').textContent =
@@ -376,6 +519,17 @@
   document.getElementById('refreshBtn').addEventListener('click', refresh);
   document.getElementById('searchInput').addEventListener('input', () => renderTable(allInitiatives));
   document.getElementById('goalFilter').addEventListener('change', () => renderTable(allInitiatives));
+  document.querySelectorAll('#initiativesTable thead th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      if (sortState.key === key) {
+        sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortState = { key, dir: key === 'goal' || key === 'name' || key === 'responsible' ? 'asc' : 'desc' };
+      }
+      renderTable(allInitiatives);
+    });
+  });
 
   refresh();
 })();

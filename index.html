@@ -52,14 +52,32 @@
       <div class="kpi-label">إجمالي التكلفة (ر.س)</div>
       <div class="kpi-value" id="kpiCost">–</div>
     </div>
+    <div class="kpi-card">
+      <div class="kpi-label">متوسط تكلفة المبادرة (ر.س)</div>
+      <div class="kpi-value" id="kpiAvgCost">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">الجهات المسؤولة</div>
+      <div class="kpi-value" id="kpiDepartments">–</div>
+    </div>
   </section>
 
-  <section class="panel" aria-label="التكلفة حسب الهدف الاستراتيجي">
+  <section class="panel" aria-label="ملخص الأهداف الاستراتيجية">
     <div class="panel-head">
-      <h2>إجمالي التكلفة حسب الهدف الاستراتيجي</h2>
+      <h2>ملخص الأهداف الاستراتيجية</h2>
+      <p class="panel-sub">عدد المبادرات، إجمالي التكلفة، ونسبة الإنجاز لكل هدف استراتيجي</p>
     </div>
     <div class="panel-body">
-      <div id="costChart" class="chart-wrap"></div>
+      <div id="goalSummaryGrid" class="goal-summary-grid"></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="نسبة الإنجاز حسب الهدف الاستراتيجي">
+    <div class="panel-head">
+      <h2>نسبة الإنجاز حسب الهدف الاستراتيجي</h2>
+    </div>
+    <div class="panel-body">
+      <div id="completionChart" class="chart-wrap"></div>
     </div>
   </section>
 
@@ -78,15 +96,15 @@
         <table id="initiativesTable">
           <thead>
             <tr>
-              <th>الهدف الاستراتيجي</th>
-              <th>المبادرة / المشروع</th>
+              <th data-sort="goal">الهدف الاستراتيجي<span class="sort-arrow"></span></th>
+              <th data-sort="name">المبادرة / المشروع<span class="sort-arrow"></span></th>
               <th class="col-desc">الوصف</th>
-              <th>المسؤول</th>
+              <th data-sort="responsible">المسؤول<span class="sort-arrow"></span></th>
               <th>المؤشر</th>
-              <th class="num">المستهدف</th>
-              <th class="num">المتحقق</th>
-              <th>نسبة الإنجاز</th>
-              <th class="num">إجمالي التكلفة</th>
+              <th class="num" data-sort="target">المستهدف<span class="sort-arrow"></span></th>
+              <th class="num" data-sort="achieved">المتحقق<span class="sort-arrow"></span></th>
+              <th class="num" data-sort="pct">نسبة الإنجاز<span class="sort-arrow"></span></th>
+              <th class="num" data-sort="cost">إجمالي التكلفة<span class="sort-arrow"></span></th>
             </tr>
           </thead>
           <tbody id="initiativesBody">
